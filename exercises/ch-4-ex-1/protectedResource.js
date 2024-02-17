@@ -45,20 +45,19 @@ let getAccessToken = function(req, res, next) {
   // validate the token and get the authorization scopes. I'm not sure if this is what really happens in 
   // production systems like Auth0, Okta, etc.
 
-  // Validate the token
-  nosql.one((token) => {
-    if (token.access_token === inToken) {
-      return token;
-    }
-  }, (err, token) => {
-    if (token) {
-      console.log("We found a matching token: %s", inToken);
-    } else {
-      console.log('No matching token was found.');
-    }
-    req.access_token = token;
-    next();
-    return;
+  // Validate the token 
+  nosql.one().make(function(builder) {
+    builder.where('access_token', inToken);
+    builder.callback(function(err, token) {
+      if (token) {
+        console.log("We found a matching token: %s", inToken);
+      } else {
+        console.log('No matching token was found.');
+      };
+      req.access_token = token;
+      next();
+      return;
+    });
   });
 };
 
