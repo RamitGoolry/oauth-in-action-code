@@ -46,11 +46,19 @@ app.get('/', function(req, res) {
 });
 
 app.get("/authorize", function(req, res) {
+  let client = getClient(req.query.client_id);
+  if (!client) {
+    res.render('error', { error: 'Unknown client' });
+    return;
+  } else if (!__.contains(client.redirect_uris, req.query.redirect_uri)) {
+    res.render('error', { error: 'Invalid redirect URI' });
+    return;
+  }
 
-  /*
-   * Process the request, validate the client, and send the user to the approval page
-   */
+  let request_id = randomstring.generate(8);
+  requests[request_id] = req.query;
 
+  res.render('approve', { client, reqid: request_id });
 });
 
 app.post('/approve', function(req, res) {
