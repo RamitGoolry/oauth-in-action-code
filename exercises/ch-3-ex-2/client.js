@@ -94,7 +94,7 @@ app.get('/callback', function(req, res) {
 
   console.log('Requesting access token for code %s', code);
 
-  if (tokRes.statusCode < 200 || tokRes.statusCode > 300) {
+  if (tokRes.statusCode < 200 || tokRes.statusCode >= 300) {
     res.render('error', { error: 'Unable to fetch access token, server response: ' + tokRes.statusCode });
     return;
   }
@@ -114,7 +114,7 @@ app.get('/callback', function(req, res) {
   res.render('index', { access_token: access_token, scope: scope, refresh_token: refresh_token });
 });
 
-app.get('/fetch_resource', function(_, res) {
+app.get('/fetch_resource', function(req, res) {
 
   console.log('Making request with access token %s', access_token);
 
@@ -127,27 +127,47 @@ app.get('/fetch_resource', function(_, res) {
     { headers: headers }
   );
 
-  if (resource.statusCode >= 200 && resource.statusCode < 300) {
-    let body = JSON.parse(resource.getBody());
-    res.render('data', { resource: body });
-    return;
-  } else {
-    /*
-     * Instead of always returning an error like we do here, refresh the access token if we have a refresh token
-     */
-    console.log("resource status error code " + resource.statusCode);
-    res.render('error', { error: 'Unable to fetch resource. Status ' + resource.statusCode });
+  if (resource.statusCode < 200 || resource.statusCode >= 300) {
+    access_token = null;
+    if (!refresh_token) {
+      console.log("resource status error code " + resource.statusCode);
+      res.render('error', { error: 'Unable to fetch resource. Status ' + resource.statusCode });
+    }
+    refreshAccessToken(req, res);
   }
 
-
+  let body = JSON.parse(resource.getBody());
+  res.render('data', { resource: body });
 });
 
-let refreshAccessToken = function(req, res) {
+let refreshAccessToken = function(_, res) {
+  console.log('Refreshing access token');
+  let form_data = qs.stringify({
+    grant_type: 'refresh_token',
+    refresh_token: refresh_token
+  });
+  let headers = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Authorization': 'Basic ' + encodeClientCredentials(client.client_id, client.client_secret)
+  };
 
-  /*
-   * Use the refresh token to get a new access token
-   */
+  let tokenResponse = request('POST', authServer.tokenEndpoint,
+    {
+      body: form_data,
+      headers: headers
+    }
+  );
 
+  let body = JSON.parse(tokenResponse.getBody());
+  access_token = body.access_token;
+  if (body.refresh_token) {
+    refresh_token = body.refresh_token;
+  }
+
+  // NOTE: We just have one /fetch_resource endpoint so we can simply redirect to it, but 
+  // in a real app we would probably want to store the path and query string of the original request, 
+  // or store a callback function to be invoked after the access token has been refreshed
+  res.redirect('/fetch_resource');
 };
 
 let buildUrl = function(base, options, hash) {
@@ -156,7 +176,7 @@ let buildUrl = function(base, options, hash) {
   if (!newUrl.query) {
     newUrl.query = {};
   }
-  __.each(options, function(value, key, list) {
+  __.each(options, function(value, key, _) {
     newUrl.query[key] = value;
   });
   if (hash) {
