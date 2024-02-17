@@ -1,5 +1,4 @@
 var express = require("express");
-var request = require("sync-request");
 var url = require("url");
 var qs = require("qs");
 var querystring = require('querystring');
@@ -78,7 +77,7 @@ app.get('/callback', function(req, res) {
   res.render('index', { access_token });
 });
 
-app.get('/fetch_resource', function(req, res) {
+app.get('/fetch_resource', function(_, res) {
   if (!access_token) {
     res.render('error', { error: 'Missing access token' });
     return;
@@ -107,7 +106,7 @@ var buildUrl = function(base, options, hash) {
   if (!newUrl.query) {
     newUrl.query = {};
   }
-  __.each(options, function(value, key, list) {
+  __.each(options, function(value, key, _) {
     newUrl.query[key] = value;
   });
   if (hash) {
