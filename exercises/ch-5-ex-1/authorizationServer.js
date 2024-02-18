@@ -62,19 +62,90 @@ app.get("/authorize", function(req, res) {
 });
 
 app.post('/approve', function(req, res) {
+  let reqid = req.body.reqid;
+  let query = requests[reqid];
+  delete requests[reqid];
 
-  /*
-   * Process the results of the approval page, authorize the client
-   */
+  if (!query) {
+    res.render('error', { error: 'No matching authorization request' });
+    return;
+  }
 
+  if (!req.body.approve) {
+    let denyUrl = buildUrl(query.redirect_uri, {
+      error: 'access_denied'
+    });
+    res.redirect(denyUrl);
+    return;
+  }
+
+  switch (query.response_type) {
+    case 'code': // Authorization Code grant type
+      let code = randomstring.generate(8);
+      codes[code] = {
+        request: query,
+      };
+      let urlParsed = buildUrl(query.redirect_uri, {
+        code: code,
+        state: query.state,
+      })
+      res.redirect(urlParsed);
+      return;
+
+    default:
+      let unsupportedUrl = buildUrl(query.redirect_uri, {
+        error: 'unsupported_response_type'
+      });
+      res.redirect(unsupportedUrl);
+      return;
+  }
 });
 
 app.post("/token", function(req, res) {
+  let clientId;
+  let clientSecret;
 
-  /*
-   * Process the request, issue an access token
-   */
+  let auth = req.headers['authorization'];
+  if (auth) {
+    let clientCredentials = decodeClientCredentials(auth);
+    clientId = clientCredentials.id;
+    clientSecret = clientCredentials.secret;
+  }
 
+  if (req.body.client_id) {
+    if (clientId) {
+      res.status(401).json({
+        error: 'Invalid Client'
+      });
+      return;
+    }
+    clientId = req.body.client_id;
+    clientSecret = req.body.client_secret;
+  }
+
+  let client = getClient(clientId);
+  if (!client) {
+    res.status(401).json({
+      error: 'Invalid Client'
+    });
+    return;
+  }
+
+  if (client.client_secret != clientSecret) {
+    res.status(401).json({
+      error: 'Invalid Client'
+    });
+    return;
+  }
+
+  switch (req.body.grant_type) {
+    case 'authorization_grant':
+    // TODO: Grant
+
+    default:
+      res.status(400).json({ error: 'unsupported_grant_type' });
+      return;
+  }
 });
 
 var buildUrl = function(base, options, hash) {
