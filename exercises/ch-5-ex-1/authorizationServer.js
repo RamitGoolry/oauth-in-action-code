@@ -41,7 +41,7 @@ var getClient = function(clientId) {
   return __.find(clients, function(client) { return client.client_id == clientId; });
 };
 
-app.get('/', function(req, res) {
+app.get('/', function(_, res) {
   res.render('index', { clients: clients, authServer: authServer });
 });
 
@@ -81,12 +81,12 @@ app.post('/approve', function(req, res) {
 
   switch (query.response_type) {
     case 'code': // Authorization Code grant type
-      let code = randomstring.generate(8);
-      codes[code] = {
+      let authorizationCode = randomstring.generate(8);
+      codes[authorizationCode] = {
         request: query,
       };
       let urlParsed = buildUrl(query.redirect_uri, {
-        code: code,
+        code: authorizationCode,
         state: query.state,
       })
       res.redirect(urlParsed);
@@ -139,8 +139,32 @@ app.post("/token", function(req, res) {
   }
 
   switch (req.body.grant_type) {
-    case 'authorization_grant':
-    // TODO: Grant
+    case 'authorization_code':
+      let authorizationCode = codes[req.body.code];
+      if (!authorizationCode) {
+        res.status(400).json({ error: "invalid_grant" });
+        return;
+      }
+      delete codes[authorizationCode];
+
+      if (authorizationCode.request.client_id != clientId) {
+        res.status(400).json({ error: "invalid_grant" });
+        return;
+      }
+
+      let accessToken = randomstring.generate();
+      nosql.insert({
+        access_token: accessToken,
+        client_id: clientId
+      });
+
+      let tokenResponse = {
+        access_token: accessToken,
+        token_type: 'Bearer',
+      };
+
+      res.status(200).json(tokenResponse);
+      return;
 
     default:
       res.status(400).json({ error: 'unsupported_grant_type' });
